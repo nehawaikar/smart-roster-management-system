@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RosterFlow | Smart Roster Management</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <h2>RosterFlow</h2>
+    <p class="sidebar-label">WORKSPACE</p>
+    <a class="active" href="#dashboard">Dashboard</a>
+    <a href="#employees">Employees</a>
+    <a href="#roster">Monthly Roster</a>
+    <a href="#rules">Working Rules</a>
+    <a href="#leave">Leave & Comp-Off</a>
+    <a href="#holidays">Public Holidays</a>
+  </aside>
+  <main class="main-content" id="dashboard">
+    <header class="topbar">
+      <div><p class="eyebrow">WORKSPACE / OVERVIEW</p><h1>Dashboard</h1>
+        <p class="subtitle">Plan schedules, monitor staffing and validate coverage.</p></div>
+      <span class="admin-badge">Operations Manager</span>
+    </header>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}<div class="flash-stack">
+        {% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}
+      </div>{% endif %}
+    {% endwith %}
+
+    <section class="welcome">
+      <div><p class="eyebrow light">ROSTER MANAGEMENT</p><h2>Plan your team's schedule</h2>
+        <p>Generate a monthly roster and identify coverage gaps before publishing.</p></div>
+      <a class="primary-button" href="#roster">Generate a roster ↓</a>
+    </section>
+
+    <section class="stats">
+      <article class="stat-card"><p>Total Employees</p><h2>{{ employees|length }}</h2><span>Saved employee records</span></article>
+      <article class="stat-card"><p>Brands</p><h2>{{ brands|length }}</h2><span>Distinct brands in assignments</span></article>
+      <article class="stat-card"><p>Processes</p><h2>{{ processes|length }}</h2><span>Configured processes</span></article>
+      <article class="stat-card"><p>Leave / Comp-Off Entries</p><h2>{{ leave_count }}</h2><span>Approved date-specific entries</span></article>
+    </section>
+
+    <section class="panel" id="roster">
+      <div class="panel-heading"><div><h2>Generate Monthly Roster</h2>
+        <p>Schedules follow each process rule, employee weekly off and approved date-specific leave.</p></div></div>
+      <form action="{{ url_for('generate_roster') }}" method="POST" class="inline-form">
+        <label for="roster_month">Select month</label>
+        <input type="month" id="roster_month" name="roster_month" value="{{ today[:7] }}" required>
+        <button type="submit" class="button">Generate & Validate</button>
+      </form>
+    </section>
+
+    <section class="panel" id="employees">
+      <div class="panel-heading"><div><h2>Employee Directory</h2><p>Sample data is stored in SQLite and persists between runs.</p></div>
+        <span class="count-badge">{{ employees|length }} employees</span></div>
+      <div class="table-wrapper"><table>
+        <thead><tr><th>EMPLOYEE</th><th>POD / POD LEAD</th><th>BRAND</th><th>PROCESS</th><th>WEEKLY OFF</th><th>MASTER STATUS</th></tr></thead>
+        <tbody>{% for e in employees %}
+          <tr><td><strong>{{ e.name }}</strong><small>EMP-{{ "%03d"|format(e.id) }}</small></td>
+            <td>{{ e.pod }}<small>{{ e.pod_lead }}</small></td><td>{{ e.brand }}</td><td>{{ e.process }}</td>
+            <td>{{ ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"][e.weekly_off] }}</td>
+            <td><form action="{{ url_for('update_employee_status', employee_id=e.id) }}" method="post" class="mini-form">
+              <select name="status" aria-label="Status for {{ e.name }}">
+                <option value="Working" {% if e.status == "Working" %}selected{% endif %}>Working</option>
+                <option value="Unavailable" {% if e.status == "Unavailable" %}selected{% endif %}>Unavailable</option>
+              </select><button class="small-button" type="submit">Save</button>
+            </form></td>
+          </tr>
+        {% endfor %}</tbody>
+      </table></div>
+    </section>
+
+    <section class="two-column">
+      <section class="panel">
+        <h2>Add Employee</h2><p>Add an employee and their initial brand/process assignment.</p>
+        <form action="{{ url_for('add_employee') }}" method="post" class="stack-form">
+          <label>Name<input name="name" required maxlength="100" placeholder="Employee name"></label>
+          <div class="form-row">
+            <label>Pod<input name="pod" required placeholder="Pod D"></label>
+            <label>Brand<input name="brand" required placeholder="Brand name"></label>
+          </div>
+          <label>Process<select name="process" required>{% for p in processes %}<option>{{ p }}</option>{% endfor %}<option>Customer Support</option><option>ACC</option><option>NDR</option><option>Retention</option></select></label>
+          <label>Weekly off<select name="weekly_off">{% for day in ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"] %}<option value="{{ loop.index0 }}">{{ day }}</option>{% endfor %}</select></label>
+          <button class="button" type="submit">Add Employee</button>
+        </form>
+      </section>
+
+      <section class="panel" id="leave">
+        <h2>Leave & Comp-Off</h2><p>Record a specific date instead of marking an employee off for the whole month.</p>
+        <form action="{{ url_for('add_leave') }}" method="post" class="stack-form">
+          <label>Employee<select name="employee_id" required>{% for e in employees %}<option value="{{ e.id }}">{{ e.name }} — {{ e.brand }}</option>{% endfor %}</select></label>
+          <label>Date<input type="date" name="leave_date" required></label>
+          <label>Type<select name="leave_type"><option value="Leave">Approved Leave</option><option value="Comp-Off">Comp-Off</option></select></label>
+          <label>Note (optional)<input name="note" placeholder="Reason / approval note"></label>
+          <button class="button" type="submit">Save Leave / Comp-Off</button>
+        </form>
+      </section>
+    </section>
+
+    <section class="panel" id="rules">
+      <h2>Brand & Process Working Rules</h2>
+      <p>Configure whether a process operates on Saturdays, Sundays and public holidays, plus its minimum daily staffing.</p>
+      <form action="{{ url_for('update_rules') }}" method="post" class="rule-form">
+        <label>Brand<input name="brand" list="brand-options" required placeholder="Choose or type brand"></label>
+        <datalist id="brand-options">{% for b in brands %}<option value="{{ b }}">{% endfor %}</datalist>
+        <label>Process<select name="process">{% for p in processes %}<option>{{ p }}</option>{% endfor %}<option>Customer Support</option><option>ACC</option><option>NDR</option><option>Retention</option></select></label>
+        <label>Minimum staff<input type="number" name="min_staff" min="1" max="100" value="1" required></label>
+        <label class="check-label"><input type="checkbox" name="operates_saturday" checked> Operates Saturdays</label>
+        <label class="check-label"><input type="checkbox" name="operates_sunday"> Operates Sundays</label>
+        <label class="check-label"><input type="checkbox" name="operates_holiday"> Operates public holidays</label>
+        <button class="button" type="submit">Save Working Rule</button>
+      </form>
+      <p class="notice">Important: the rules and holiday dates in this starter project are sample assumptions. Confirm actual client requirements before using the roster operationally.</p>
+    </section>
+
+    <section class="panel" id="holidays">
+      <h2>Public Holidays</h2><p>Add the holidays applicable to your operation. Each process rule determines whether it still requires coverage on that date.</p>
+      <form action="{{ url_for('add_holiday') }}" method="post" class="inline-form">
+        <label>Holiday date<input type="date" name="holiday_date" required></label>
+        <label>Holiday name<input name="holiday_name" required placeholder="Holiday name"></label>
+        <button class="button" type="submit">Add Holiday</button>
+      </form>
+    </section>
+
+    <footer>RosterFlow · Smart Roster Management System · Development version</footer>
+  </main>
+</div>
+</body>
+</html>

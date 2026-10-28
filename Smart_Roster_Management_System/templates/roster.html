@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Monthly Roster — {{ selected_month }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="roster-page">
+<main class="main-content roster-main">
+  <section class="welcome roster-welcome">
+    <div><p class="eyebrow light">ROSTER / VALIDATION</p><h1>Monthly Employee Roster</h1><p>Roster for {{ selected_month }}</p></div>
+    <div class="welcome-actions"><a class="primary-button" href="{{ url_for('home') }}">← Dashboard</a>
+      <a class="primary-button" href="{{ url_for('export_roster', month_value=selected_month_value) }}">Export CSV ↓</a></div>
+  </section>
+
+  <section class="panel">
+    <h2>Roster Overview</h2>
+    <div class="stats roster-stats">
+      <article class="stat-card"><h3>Working Assignments</h3><p>{{ summary.working }}</p></article>
+      <article class="stat-card"><h3>Weekly Offs</h3><p>{{ summary.weekly_off }}</p></article>
+      <article class="stat-card"><h3>Leave Days</h3><p>{{ summary.leave }}</p></article>
+      <article class="stat-card"><h3>Comp-Offs</h3><p>{{ summary.comp_off }}</p></article>
+      <article class="stat-card"><h3>Holidays</h3><p>{{ summary.holidays }}</p></article>
+      <article class="stat-card"><h3>Sunday Offs</h3><p>{{ summary.sunday_off }}</p></article>
+    </div>
+
+    <div class="section-heading"><div><h2>Coverage & Conflict Checks</h2><p>Conflicts are calculated for each configured brand/process and required operating date.</p></div>
+      <span class="count-badge">{{ conflicts|length }} issue(s)</span></div>
+    {% if conflicts %}
+      <div class="conflict-list">{% for c in conflicts %}
+        <article class="conflict-card"><strong>{{ c.employee }}</strong><p>{{ c.issue }}</p><small>Pod: {{ c.pod }}{% if c.date %} · Date: {{ c.date }}{% endif %}</small></article>
+      {% endfor %}</div>
+    {% else %}<p class="no-conflicts">No coverage conflicts detected for the configured rules.</p>{% endif %}
+
+    <div class="section-heading"><div><h2>Employee Assignments</h2><p>{{ roster|length }} daily employee entries</p></div></div>
+    <div class="roster-filters">
+      <input type="text" id="rosterSearch" placeholder="Search employee..." aria-label="Search employee">
+      <select id="podFilter" aria-label="Filter by pod"><option value="">All Pods</option></select>
+      <select id="brandFilter" aria-label="Filter by brand"><option value="">All Brands</option></select>
+      <select id="processFilter" aria-label="Filter by process"><option value="">All Processes</option></select>
+      <select id="shiftFilter" aria-label="Filter by status"><option value="">All Statuses</option></select>
+      <input type="date" id="dateFilter" aria-label="Filter by date">
+      <button type="button" class="secondary-button" id="resetRosterFilters">Reset Filters</button>
+    </div>
+    <div class="table-wrapper"><table id="rosterTable">
+      <thead><tr><th>Date</th><th>Employee</th><th>Pod / Lead</th><th>Brand</th><th>Process</th><th>Shift / Status</th></tr></thead>
+      <tbody>{% for item in roster %}
+        <tr data-date="{{ item.date_iso }}">
+          <td>{{ item.date }}</td><td>{{ item.employee }}<small>EMP-{{ "%03d"|format(item.employee_id) }}</small></td>
+          <td>{{ item.pod }}<small>{{ item.pod_lead }}</small></td><td>{{ item.brand }}</td><td>{{ item.process }}</td>
+          <td><span class="status-pill
+            {% if item.shift == 'Day Shift' %}status-working
+            {% elif 'Off' in item.shift %}status-off
+            {% elif item.shift == 'On Leave' or item.shift == 'Unavailable' %}status-leave
+            {% else %}status-holiday{% endif %}">{{ item.shift }}</span></td>
+        </tr>
+      {% else %}<tr><td colspan="6">No roster entries available.</td></tr>{% endfor %}</tbody>
+    </table></div>
+    <p class="table-footnote">This roster is generated from current employee records, approved leave entries, holidays and process rules. If you change inputs, generate the roster again to recalculate it.</p>
+  </section>
+</main>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const table = document.getElementById("rosterTable");
+  const rows = Array.from(table.querySelectorAll("tbody tr")).filter(r => r.cells.length === 6);
+  const search = document.getElementById("rosterSearch");
+  const pod = document.getElementById("podFilter");
+  const brand = document.getElementById("brandFilter");
+  const process = document.getElementById("processFilter");
+  const shift = document.getElementById("shiftFilter");
+  const date = document.getElementById("dateFilter");
+  const reset = document.getElementById("resetRosterFilters");
+  function populate(select, column, getValue = row => row.cells[column].textContent.trim()) {
+    [...new Set(rows.map(getValue).filter(Boolean))].sort().forEach(value => {
+      const option = document.createElement("option");
+      option.value = value; option.textContent = value; select.appendChild(option);
+    });
+  }
+  populate(pod, 2, row => row.cells[2].childNodes[0].textContent.trim());
+  populate(brand, 3); populate(process, 4);
+  populate(shift, 5, row => row.cells[5].querySelector(".status-pill")?.textContent.trim() || "");
+  function filterRows() {
+    const query = search.value.toLowerCase().trim();
+    rows.forEach(row => {
+      const status = row.cells[5].querySelector(".status-pill")?.textContent.trim() || "";
+      const podValue = row.cells[2].childNodes[0].textContent.trim();
+      const matches = row.cells[1].textContent.toLowerCase().includes(query)
+        && (!pod.value || podValue === pod.value)
+        && (!brand.value || row.cells[3].textContent.trim() === brand.value)
+        && (!process.value || row.cells[4].textContent.trim() === process.value)
+        && (!shift.value || status === shift.value)
+        && (!date.value || row.dataset.date === date.value);
+      row.hidden = !matches;
+    });
+  }
+  [search, pod, brand, process, shift, date].forEach(el => {
+    el.addEventListener("input", filterRows); el.addEventListener("change", filterRows);
+  });
+  reset.addEventListener("click", () => {
+    search.value = pod.value = brand.value = process.value = shift.value = date.value = "";
+    filterRows();
+  });
+});
+</script>
+</body>
+</html>
